@@ -1,0 +1,23 @@
+{
+  "name": "gl-me",
+  "authors": [
+    "erluzi <747877078@qq.com>"
+  ],
+  "description": "",
+  "main": "",
+  "keywords": [
+    "webgl"
+  ],
+  "license": "MIT",
+  "homepage": "",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "devDependencies": {
+    "twgl.js": "^1.7.1"
+  }
+}
