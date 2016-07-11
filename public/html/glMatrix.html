@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <meta name="robots" content="index,follow"/>
+    <title>glMatrix</title>
+
+</head>
+<body>
+glMatrix
+<script src="../vendor/gl-matrix-min.js"></script>
+<script>
+    var u = vec3.fromValues(1,2,3);
+    var v = vec3.fromValues(4,5,6);
+    var s = vec3.create();
+    vec3.add(s, u, v);
+    console.log('s ==> ', s);
+
+    console.log('glMatrix.USE_SIMD => ', glMatrix.USE_SIMD);
+
+    //列优先
+    var mat41 = mat4.fromValues(
+            1,2,3,4,
+            1,2,3,4,
+            1,2,3,4,
+            1,2,3,4
+    );
+    var mat42 = mat4.fromValues(
+            5,6,7,8,
+            5,6,7,8,
+            5,6,7,8,
+            5,6,7,8
+    );
+    var mat4s = mat4.create();
+    mat4.multiply(mat4s, mat41, mat42);// mat42 * mat41 => mat4s
+    console.log('mat4 multiply => ', mat4s);
+
+</script>
+</body>
+</html>
