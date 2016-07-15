@@ -6,7 +6,7 @@
     <meta name="apple-touch-fullscreen" content="yes">
     <meta name="format-detection" content="telephone=no,email=no">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>transform</title>
+    <title>2D变换</title>
     <link rel="stylesheet" href="../css/styles.css">
     <script id="vs" type="x-shader/x-vertex">
         attribute vec2 a_position;
@@ -89,7 +89,7 @@
             // mat3.multiply(matrix, projectionMatrix, matrix);
         }else if(type===Scene.changeOrigin){
             //todo 改变原点
-            // 执行顺序:T R S T P I (反向执行是相对原点)
+            // 执行顺序:T R S T P I
             mat3.multiply(matrix, matrix, projectionMatrix);
             mat3.multiply(matrix, matrix, translateMatrix);
             mat3.multiply(matrix, matrix, scaleMatrix);

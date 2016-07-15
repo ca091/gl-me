@@ -6,15 +6,18 @@
     <meta name="apple-touch-fullscreen" content="yes">
     <meta name="format-detection" content="telephone=no,email=no">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>3D模型变换</title>
+    <title>3D视图变换,投影变换</title>
     <link rel="stylesheet" href="../css/styles.css">
     <script id="vs" type="x-shader/x-vertex">
         attribute vec4 a_position;
         attribute vec4 a_color;
         varying vec4 v_color;
         uniform mat4 u_matrix;
+        //uniform float u_fudgeFactor;
         void main(){
             gl_Position = u_matrix * a_position;
+            //float zToDivideBy = 1.0 + position.z * u_fudgeFactor;
+            //gl_Position = vec4( position.xyz, zToDivideBy);
             v_color = a_color;
         }
     </script>
@@ -32,19 +35,27 @@
 <script src="../vendor/twgl.min.js"></script>
 <!--matrix 列优先-->
 <script src="../vendor/gl-matrix-min.js"></script>
+<script src="../vendor/webgl-3d-math.js"></script>
+<script src="../js/gl.js"></script>
 
 <script>
+window.onload = init;
+function init(){
     var canvas = document.getElementById('canvas');
     var gl = canvas.getContext('webgl');
+    gl.enable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+
     var program = twgl.createProgramFromScripts(gl, ['vs', 'fs']);
     gl.useProgram(program);
 
     // get location
     var positionLocation = gl.getAttribLocation(program, 'a_position');
-    var matrixLocation = gl.getUniformLocation(program, 'u_matrix');
     var colorLocation = gl.getAttribLocation(program, 'a_color');
+    var matrixLocation = gl.getUniformLocation(program, 'u_matrix');
+    //var fudgeLocation = gl.getUniformLocation(program, 'u_fudgeFactor');
 
-    // bind buffer & init value
+    // buffer & value
     var buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(positionLocation);
@@ -56,33 +67,130 @@
     gl.vertexAttribPointer(colorLocation, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     setColors(gl);
     //gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);
+    //gl.uniform1f(fudgeLocation, 1);
 
+    var translation = [0, 0, -360];
+    var rotation = [degToRad(190), degToRad(40), degToRad(320)];
+    var scale = [1, 1, 1];
+    var fieldOfViewRadians = degToRad(60);
     var Scene = {
-        matrixOverlying: 1,
-        anotherForm: 2,
-        changeOrigin: 3,
-        depth: 400 //深度
+        normal: 'normal',
+        loop: 'loop',
+        radius: 200, //照相机距离原点半径
     };
-    // draw
-    drawScene(Scene.changeOrigin);
 
-    function drawScene(type){
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.enable(gl.CULL_FACE);
-        gl.enable(gl.DEPTH_TEST);
-        // compute the matrix, 严格按顺序变换,对象是世界坐标系自身
-        // I * S * S * T * S, converted from pixels to clip space
-        var projectionMatrix = mat4.fromValues(
-                2/canvas.width, 0, 0, 0,
-                0, -2/canvas.height, 0, 0,
-                0, 0, 2/Scene.depth, 0,
-                -1,  1,  0,  1
-        );
-        var translateMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(200,100,50));
-        var scaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(1, 1, 1));
-        var rotateMatrix = mat4.fromRotation(mat4.create(), 30*Math.PI/180, vec3.fromValues(1,1,0));
+    //draw(Scene.loop);
+    drawScene();
+    /**
+     * another form, same as draw(Scene.normal)
+     */
+    function drawScene() {
+        // Clear the canvas AND the depth buffer.
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Compute the matrices
+        var aspect = canvas.clientWidth / canvas.clientHeight;
+        var projectionMatrix = makePerspective(fieldOfViewRadians, aspect, 1, 2000);
+
+//        var translationMatrix = makeTranslation(translation[0], translation[1], translation[2]);
+//        var rotationXMatrix = makeXRotation(rotation[0]);
+//        var rotationYMatrix = makeYRotation(rotation[1]);
+//        var rotationZMatrix = makeZRotation(rotation[2]);
+//        var scaleMatrix = makeScale(scale[0], scale[1], scale[2]);
+        var Loop = {
+            angle: 1,
+            then: 0
+        };
+
+        /**
+         * 改变相机位置
+         * 着重相机如何变换,相机的焦点对象,
+         * 此处相机焦点是原点
+         */
+        function loopRender(){
+            for(var ii=0;ii<5;ii++){
+                var angle = ii*Math.PI*2/5;
+                var x = Math.cos(angle)*Scene.radius;
+                var z = Math.sin(angle)*Scene.radius;
+                // Compute the camera's matrix
+                var cameraMatrix = makeTranslation(0, 0, Scene.radius*2);
+                cameraMatrix = matrixMultiply( cameraMatrix, makeYRotation(G.degToRad(++Loop.angle)));
+                // Make a view matrix from the camera matrix.
+                var viewMatrix = makeInverse(cameraMatrix);
+                // 模型变换 * 视图变换(相机) * 投影变换(透视)
+                var modelMatrix = matrixMultiply(makeTranslation(x,-100,z), makeXRotation(G.degToRad(180)));
+                var matrix = matrixMultiply(modelMatrix, viewMatrix);
+                matrix = matrixMultiply(matrix, projectionMatrix);
+                // Set the matrix.
+                gl.uniformMatrix4fv(matrixLocation, false, matrix);
+
+                // Draw the geometry.
+                gl.drawArrays(gl.TRIANGLES, 0, 16 * 6);
+            }
+            if(Loop.angle < 360){
+                requestAnimationFrame(loopRender)
+            }
+        }
+
+        /**
+         * 相机焦点到第一个F
+         */
+        function loopRenderForOneF(now){
+            if(Loop.angle<4){
+                console.log(now);
+            }
+            now *= 0.001;
+            var deltaTime = now - Loop.then;
+            Loop.then = now;
+            Loop.angle += deltaTime * 30;
+            for(var ii=0;ii<5;ii++){
+                var angle = ii*Math.PI*2/5;
+                var x = Math.cos(angle)*Scene.radius;
+                var z = Math.sin(angle)*Scene.radius;
+                // Compute the camera's matrix
+                var cameraMatrix = matrixMultiply(makeTranslation(150,50,Scene.radius*2), makeYRotation(G.degToRad(Loop.angle)));
+                var cameraPosition = [
+                        cameraMatrix[12],
+                        cameraMatrix[13],
+                        cameraMatrix[14]
+                ];
+                var up = [0, 1, 0];
+                cameraMatrix = makeLookAt(cameraPosition, [Scene.radius, 0, 0], up);
+                // Make a view matrix from the camera matrix.
+                var viewMatrix = makeInverse(cameraMatrix);
+                // 模型变换 * 视图变换(相机) * 投影变换(透视投影)
+                var modelMatrix = matrixMultiply(makeTranslation(x,-50,z), makeXRotation(G.degToRad(180)));
+                var matrix = matrixMultiply(modelMatrix, viewMatrix);
+                matrix = matrixMultiply(matrix, projectionMatrix);
+
+                // Set the matrix.
+                gl.uniformMatrix4fv(matrixLocation, false, matrix);
+                // Draw the geometry.
+                gl.drawArrays(gl.TRIANGLES, 0, 16 * 6);
+            }
+            requestAnimationFrame(loopRenderForOneF);
+        }
+        requestAnimationFrame(loopRenderForOneF);
+
+
+    }
+    function draw(type){
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        // Compute the matrices
+        // todo 投影变换, 变换到裁剪坐标 z对xy的影响 xy/zToDivideBy zNear ends up at Z = -1,zFar ends up at Z = 1.
+        var projectionMatrix = mat4.perspective(mat4.create(), G.degToRad(60), canvas.clientWidth/canvas.clientHeight, 1, 1000);
+        // I * S * S * T * S, 严格按顺序变换,对象是世界坐标系自身, converted from pixels to clip space
+//        var projectionMatrix = mat4.fromValues(
+//                2/canvas.width, 0, 0, 0,
+//                0, -2/canvas.height, 0, 0,
+//                0, 0, 2/Scene.depth, 0,
+//                -1,  1,  0,  1
+//        );
+        var translateMatrix = mat4.fromTranslation(mat4.create(), vec3.fromValues(translation[0], translation[1], translation[2]));
+        var scaleMatrix = mat4.fromScaling(mat4.create(), vec3.fromValues(scale[0], scale[1], scale[2]));
+        var rotateMatrix = mat4.fromRotation(mat4.create(), G.degToRad(30), vec3.fromValues(1,1,0));
         var matrix = mat4.create();
-        if(type===Scene.matrixOverlying){
+        if(type===Scene.normal){
             // 执行顺序:R*S*T*P*I
             mat4.multiply(matrix, matrix, projectionMatrix);
             mat4.multiply(matrix, matrix, translateMatrix);
@@ -98,7 +206,7 @@
             // mat4.multiply(matrix, scaleMatrix, matrix);
             // mat4.multiply(matrix, translateMatrix, matrix);
             // mat4.multiply(matrix, projectionMatrix, matrix);
-        }else if(type===Scene.changeOrigin){
+        }else if(type===Scene.loop){
 
             //可理解为改变了原点 此时原点(100,100)
             //mat4.multiply(matrix, matrix, translateMatrix);
@@ -110,7 +218,6 @@
             function renderLoop(){
                 var rotateMatrix = mat4.fromRotation(mat4.create(), (++Render.angle)*Math.PI/180, vec3.fromValues(1,1,0));
                 var matrix = mat4.create();
-                //todo 改变原点
                 // 执行顺序:T R S T P I 相对原点
                 mat4.multiply(matrix, matrix, projectionMatrix);
                 mat4.multiply(matrix, matrix, translateMatrix);
@@ -125,8 +232,9 @@
             }
             renderLoop();
         }
-
     }
+}
+
     function setColors(gl){
         gl.bufferData(
                 gl.ARRAY_BUFFER,
