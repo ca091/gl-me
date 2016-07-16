@@ -103,22 +103,25 @@ function init(){
         };
 
         /**
-         * 改变相机位置
-         * 着重相机如何变换,相机的焦点对象,
+         * 变换相机位置
+         * 着重相机如何变换 & 相机的焦点对象
          * 此处相机焦点是原点
          */
-        function loopRender(){
+        function loopRender(now){
+            now *= 0.001;
+            var deltaTime = now - Loop.then;
+            Loop.then = now;
+            Loop.angle += deltaTime * 30;
+            // Compute the camera's matrix
+            var cameraMatrix = matrixMultiply(makeTranslation(0, -100, Scene.radius*2), makeYRotation(G.degToRad(Loop.angle)));
+            // Make a view matrix from the camera matrix.
+            var viewMatrix = makeInverse(cameraMatrix);
             for(var ii=0;ii<5;ii++){
                 var angle = ii*Math.PI*2/5;
                 var x = Math.cos(angle)*Scene.radius;
                 var z = Math.sin(angle)*Scene.radius;
-                // Compute the camera's matrix
-                var cameraMatrix = makeTranslation(0, 0, Scene.radius*2);
-                cameraMatrix = matrixMultiply( cameraMatrix, makeYRotation(G.degToRad(++Loop.angle)));
-                // Make a view matrix from the camera matrix.
-                var viewMatrix = makeInverse(cameraMatrix);
+                var modelMatrix = matrixMultiply(makeTranslation(x,0,z), makeXRotation(G.degToRad(180)));
                 // 模型变换 * 视图变换(相机) * 投影变换(透视)
-                var modelMatrix = matrixMultiply(makeTranslation(x,-100,z), makeXRotation(G.degToRad(180)));
                 var matrix = matrixMultiply(modelMatrix, viewMatrix);
                 matrix = matrixMultiply(matrix, projectionMatrix);
                 // Set the matrix.
@@ -127,13 +130,14 @@ function init(){
                 // Draw the geometry.
                 gl.drawArrays(gl.TRIANGLES, 0, 16 * 6);
             }
-            if(Loop.angle < 360){
-                requestAnimationFrame(loopRender)
-            }
+            requestAnimationFrame(loopRender)
         }
 
         /**
+         * 变换相机位置
          * 相机焦点到第一个F
+         * cameraMatrix => makeInverse(cameraMatrix) 分两步
+         * makeLookAt(相机位置, 焦点位置, 方向)
          */
         function loopRenderForOneF(now){
             if(Loop.angle<4){
@@ -143,23 +147,25 @@ function init(){
             var deltaTime = now - Loop.then;
             Loop.then = now;
             Loop.angle += deltaTime * 30;
+            // Compute the camera's matrix
+            var cameraMatrix = matrixMultiply(makeTranslation(0,50,Scene.radius*2), makeYRotation(G.degToRad(Loop.angle)));
+            var cameraPosition = [
+                    cameraMatrix[12],
+                    cameraMatrix[13],
+                    cameraMatrix[14]
+            ];
+            var up = [0, 1, 0];
+            cameraMatrix = makeLookAt(cameraPosition, [Scene.radius, 0, 0], up);
+            // Make a view matrix from the camera matrix.
+            var viewMatrix = makeInverse(cameraMatrix);
             for(var ii=0;ii<5;ii++){
                 var angle = ii*Math.PI*2/5;
                 var x = Math.cos(angle)*Scene.radius;
                 var z = Math.sin(angle)*Scene.radius;
-                // Compute the camera's matrix
-                var cameraMatrix = matrixMultiply(makeTranslation(150,50,Scene.radius*2), makeYRotation(G.degToRad(Loop.angle)));
-                var cameraPosition = [
-                        cameraMatrix[12],
-                        cameraMatrix[13],
-                        cameraMatrix[14]
-                ];
-                var up = [0, 1, 0];
-                cameraMatrix = makeLookAt(cameraPosition, [Scene.radius, 0, 0], up);
-                // Make a view matrix from the camera matrix.
-                var viewMatrix = makeInverse(cameraMatrix);
+                //每一个F焦点到相机 (把每一个F看作相机)
+                //var modelMatrix = matrixMultiply(makeXRotation(G.degToRad(180)), makeLookAt([x,0,z], cameraPosition, up));
+                var modelMatrix = matrixMultiply(makeTranslation(x,0,z), makeXRotation(G.degToRad(180)));
                 // 模型变换 * 视图变换(相机) * 投影变换(透视投影)
-                var modelMatrix = matrixMultiply(makeTranslation(x,-50,z), makeXRotation(G.degToRad(180)));
                 var matrix = matrixMultiply(modelMatrix, viewMatrix);
                 matrix = matrixMultiply(matrix, projectionMatrix);
 
@@ -171,8 +177,6 @@ function init(){
             requestAnimationFrame(loopRenderForOneF);
         }
         requestAnimationFrame(loopRenderForOneF);
-
-
     }
     function draw(type){
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

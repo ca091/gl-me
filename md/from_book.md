@@ -44,3 +44,21 @@ gl_FragColor
 ### 如何看待变换
 - 用固定的全局坐标系 实际顺序与代码调用顺序相反
 - 用局部坐标系 实际顺序与代码调用顺序一致
+
+### 2D纹理 立方映射纹理
+- 纹理坐标系 (0,0) => (1,1) 横向s 纵向t, 1代表一个图象单元
+- 创建纹理对象 => 绑定纹理数据
+- 纹理图象单元 默认gl.TEXTURE0
+- 纹理过滤: 纹理伸展或收缩时计算片段颜色的一般过程
+ ```
+ gl.TEXTURE_MAG_FILTER  gl.TEXTURE_MIN_FILTER ...
+ ```
+- 过滤模式
+```
+NEAREST LINEAR NEAREST_MIPMAP_NEAREST .. LINEAR_MIPMAP_LINEAR
+最近相邻 线性 Mip映射
+```
+- 纹理坐标包装: 纹理坐标 增大||缩小, 使纹理平铺的方式
+```
+gl.REPEAT 默认 gl.MIRRORED_REPEAT gl.CLAMP_TO_EDGE
+```
