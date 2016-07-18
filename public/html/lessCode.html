@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <meta name="robots" content="index,follow"/>
+    <link rel="stylesheet" href="../css/styles.css">
+    <title>lessCode</title>
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        uniform mat4 u_matrix;
+        //texture
+        attribute vec2 a_texCoord;
+        varying vec2 v_texCoord;
+        void main(){
+            gl_Position = u_matrix * a_position;
+            v_texCoord = a_texCoord;
+        }
+    </script>
+    <script id="fs" type="x-shader/x-fragment">
+        precision mediump float;
+        // texture
+        uniform sampler2D u_texture;
+        varying vec2 v_texCoord;
+        void main() {
+           gl_FragColor = texture2D(u_texture, v_texCoord);
+        }
+    </script>
+
+</head>
+<body>
+<canvas id="canvas" width="500" height="400"></canvas>
+<script src="../vendor/twgl.min.js"></script>
+<script src="../vendor/webgl-3d-math.js"></script>
+<script src="../js/gl.js"></script>
+<script src="../bufferData/lessCode.js"></script>
+<script>
+    window.onload = init;
+    function init(){
+        var canvas = document.getElementById('canvas');
+        var gl = canvas.getContext('webgl');
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+        var program = twgl.createProgramFromScripts(gl, ['vs', 'fs']);
+        gl.useProgram(program);
+
+        var arrays = {
+            a_position: { numComponents: 3, data: data_position },
+            a_texCoord: { numComponents: 2, data: data_texture }
+        };
+        var bufferInfo = twgl.createBufferInfoFromArrays(gl, arrays);
+        var attribSetters = twgl.createAttributeSetters(gl, program);
+        twgl.setBuffersAndAttributes(gl, attribSetters, bufferInfo);
+
+        {
+        // get location
+        //var positionLocation = gl.getAttribLocation(program, 'a_position');
+        //var textureLocation = gl.getAttribLocation(program, 'a_texCoord');//纹理
+        var matrixLocation = gl.getUniformLocation(program, 'u_matrix');
+
+        // buffer & value
+        //var buffer = gl.createBuffer();
+        //gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        //gl.enableVertexAttribArray(positionLocation);
+        //gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+        //set3Df(gl);
+        //var texCoordBuffer = gl.createBuffer();
+        //gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        //gl.enableVertexAttribArray(textureLocation);
+        //gl.vertexAttribPointer(textureLocation, 2, gl.FLOAT, true, 0, 0);
+        //setTexcoords(gl);
+        }
+
+        // texture
+        var texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        // 用蓝色取代纹理,等待图象load完毕
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]));
+        var image = new Image();
+        image.addEventListener('load', function () {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);// 0代表Mip映射级别
+            // Check if the image is a power of 2 in both dimensions.
+            if (G.isPowerOf2(image.width) && G.isPowerOf2(image.height)) {
+                // Yes, it's a power of 2. Generate mips.
+                gl.generateMipmap(gl.TEXTURE_2D);
+            } else {
+                // No, it's not a power of 2. Turn of mips and set wrapping to clamp to edge
+                gl.texParameteri(gl.TETXURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TETXURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TETXURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+        });
+        image.src = '../img/robot.png';
+
+        drawScene();
+        function drawScene(){
+            // Clear the canvas AND the depth buffer.
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // projectionMatrix
+            var aspect = canvas.clientWidth / canvas.clientHeight;
+            var projectionMatrix = makePerspective(G.degToRad(60), aspect, 1, 2000);
+
+            // cameraMatrix & viewMatrix
+            var cameraPosition = [0,0,200];
+            var target = [0,0,0];
+            var up = [0,1,0];
+            var cameraMatrix = makeLookAt(cameraPosition, target, up);
+            var viewMatrix = makeInverse(cameraMatrix);
+
+            var Loop = {
+                then: 0,
+                radX: 0,
+                radY: 0
+            };
+            function looper(now){
+                now *= 0.001;
+                var deltaTime = now - Loop.then;
+                Loop.then = now;
+                Loop.radX += deltaTime * 1.2;
+                Loop.radY += deltaTime * 0.7;
+                // compute matrix
+                var translationMatrix = makeTranslation(-50,-50,0);
+                var xRotationMatrix = makeXRotation(Loop.radX);
+                var yRotationMatrix = makeYRotation(Loop.radY);
+                // multiply matrix
+                var modelMatrix = matrixMultiply(translationMatrix, xRotationMatrix);//先translate
+                modelMatrix = matrixMultiply(modelMatrix, yRotationMatrix);
+                // modelMatrix * viewMatrix * projectionMatrix
+                var matrix = matrixMultiply(modelMatrix, viewMatrix);
+                matrix = matrixMultiply(matrix, projectionMatrix);
+                gl.uniformMatrix4fv(matrixLocation, false, matrix);
+                gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
+
+                requestAnimationFrame(looper)
+            }
+            requestAnimationFrame(looper)
+        }
+    }
+</script>
+</body>
+</html>

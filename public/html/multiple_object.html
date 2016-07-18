@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <meta name="robots" content="index,follow"/>
+    <title>multiple_Objects</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        attribute vec4 a_color;
+
+        uniform mat4 u_matrix;
+
+        varying vec4 v_color;
+
+        void main() {
+          // Multiply the position by the matrix.
+          gl_Position = u_matrix * a_position;
+
+          // Pass the color to the fragment shader.
+          v_color = a_color;
+        }
+    </script>
+    <script id="fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        // Passed in from the vertex shader.
+        varying vec4 v_color;
+
+        uniform vec4 u_colorMult;
+
+        void main() {
+           gl_FragColor = v_color * u_colorMult;
+        }
+    </script>
+
+</head>
+<body>
+<canvas id="canvas" width="500" height="400"></canvas>
+<script src="../vendor/webgl-3d-math.js"></script>
+<script src="../vendor/webgl-utils.js"></script>
+<script src="../vendor/primitives.js"></script>
+<script src="../js/gl.js"></script>
+<script>
+window.onload = init;
+function init(){
+    var canvas = document.getElementById('canvas');
+    var gl = canvas.getContext('webgl');
+    var programInfo = createProgramInfo(gl, ['vs', 'fs']);
+
+    var sphereBufferInfo = createFlattenedVertices(gl, primitives.createSphereVertices(10, 12, 6));
+    var cubeBufferInfo   = createFlattenedVertices(gl, primitives.createCubeVertices(20));
+    var coneBufferInfo   = createFlattenedVertices(gl, primitives.createTruncatedConeVertices(10, 0, 20, 12, 1, true, false));
+
+    // Uniforms for each object.
+    var sphereUniforms = {
+        u_colorMult: [0.5, 1, 0.5, 1],
+        u_matrix: makeIdentity()
+    };
+    var cubeUniforms = {
+        u_colorMult: [1, 0.5, 0.5, 1],
+        u_matrix: makeIdentity()
+    };
+    var coneUniforms = {
+        u_colorMult: [0.5, 0.5, 1, 1],
+        u_matrix: makeIdentity()
+    };
+
+    var objectsToDraw = [
+        {
+            programInfo: programInfo,
+            bufferInfo: sphereBufferInfo,
+            uniforms: sphereUniforms
+        },
+        {
+            programInfo: programInfo,
+            bufferInfo: cubeBufferInfo,
+            uniforms: cubeUniforms
+        },
+        {
+            programInfo: programInfo,
+            bufferInfo: coneBufferInfo,
+            uniforms: coneUniforms
+        }
+    ];
+
+    drawScene();
+    function drawScene(){
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+        // Clear the canvas AND the depth buffer.
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Compute the projection matrix
+        var aspect = canvas.clientWidth / canvas.clientHeight;
+        var projectionMatrix = makePerspective(G.degToRad(60), aspect, 1, 2000);
+
+        // Compute the camera's matrix using look at.
+        var cameraPosition = [0, 0, 100];
+        var target = [0, 0, 0];
+        var up = [0, 1, 0];
+        var cameraMatrix = makeLookAt(cameraPosition, target, up);
+
+        // Make a view matrix from the camera matrix.
+        var viewMatrix = makeInverse(cameraMatrix);
+
+        var sphereTranslationMatrix  = makeTranslation(0, 0, 0);
+        var cubeTranslationMatrix   = makeTranslation(-40, 0, 0);
+        var coneTranslationMatrix   = makeTranslation(40, 0, 0);
+
+        /**
+         * 变换模型 只关注 x & y 的 rotation
+         * @param time
+         */
+        function looper(time){
+            time *= 0.0005;
+            var sphereXRotation =  time;
+            var sphereYRotation =  time;
+            var cubeXRotation   = -time;
+            var cubeYRotation   =  time;
+            var coneXRotation   =  time;
+            var coneYRotation   = -time;
+
+            sphereUniforms.u_matrix = computeMatrix(viewMatrix, projectionMatrix, sphereTranslationMatrix, sphereXRotation, sphereYRotation);
+            cubeUniforms.u_matrix = computeMatrix(viewMatrix, projectionMatrix, cubeTranslationMatrix, cubeXRotation, cubeYRotation);
+            coneUniforms.u_matrix = computeMatrix(viewMatrix, projectionMatrix, coneTranslationMatrix, coneXRotation, coneYRotation);
+
+            var lastUsedProgramInfo = null;
+            var lastUsedBufferInfo = null;
+            // ------ Draw the objects --------
+            objectsToDraw.forEach(function(object) {
+                var programInfo = object.programInfo;
+                var bufferInfo = object.bufferInfo;
+
+                if(programInfo !== lastUsedProgramInfo){
+                    lastUsedProgramInfo = programInfo;
+                    gl.useProgram(programInfo.program); // multiple shader
+                }
+
+                if(programInfo !== lastUsedProgramInfo || bufferInfo != lastUsedBufferInfo){
+                    lastUsedBufferInfo = bufferInfo;
+                    // Setup all the needed attributes.
+                    setBuffersAndAttributes(gl, programInfo.attribSetters, bufferInfo);
+                }
+                // Set the uniforms.
+                setUniforms(programInfo.uniformSetters, object.uniforms);
+
+                // Draw
+                gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
+            });
+            requestAnimationFrame(looper);
+        }
+        requestAnimationFrame(looper);
+    }
+
+    function createFlattenedVertices(gl, vertices) {
+        return createBufferInfoFromArrays(
+                gl,
+                primitives.makeRandomVertexColors(
+                        primitives.deindexVertices(vertices),
+                        {
+                            vertsPerColor: 6,
+                            rand: function(ndx, channel) {
+                                return channel < 3 ? ((128 + Math.random() * 128) | 0) : 255;
+                            }
+                        }
+                )
+        );
+    }
+
+    function computeMatrix(viewMatrix, projectionMatrix, translationMatrix, xRotation, yRotation) {
+        var xRotationMatrix = makeXRotation(xRotation);
+        var yRotationMatrix = makeYRotation(yRotation);
+        var worldMatrix = matrixMultiply(matrixMultiply(xRotationMatrix, yRotationMatrix), translationMatrix);
+        return matrixMultiply(matrixMultiply(worldMatrix, viewMatrix), projectionMatrix);
+    }
+}
+</script>
+</body>
+</html>
