@@ -65,3 +65,34 @@ gl.REPEAT 默认 gl.MIRRORED_REPEAT gl.CLAMP_TO_EDGE
 
 ### 光照
 - 光照模型: 局部 全局
+- phong反射模型: 一个点的颜色由3个不同的反射分量组成,即
+```
+环境光
+漫射光
+镜面光
+
+总反射 = 环境反射 + 漫反射 + 镜面反射 (反射是光与材质相互作用的结果)
+
+K:对应材质, I:对应光分量, n:表面法线单位矢量, l:光线单位矢量,指向光源, r:反射光单位矢量, v:视线单位矢量,指向观察者, a:光泽度
+
+环境反射: I=KI (不考虑光的位置和方向, 视线)
+uniform vec3 u_ambient_material;
+uniform vec3 u_ambient_light;
+vec3 ambient_reflection = u_ambient_material * u_ambient_light;
+
+漫反射: I=KI*max(cos,0) / I=KI*max(n.l,0) n,l是单位向量 (不考虑视线)
+u.v = |u||v|cos
+vec3 diffuse_reflection = u_diffuse_material * u_diffuse_light * max(dot(normal,vectorToLight), 0.0);
+
+镜面反射: I=KI*max(cos,0)a次方 / I=KI*max(r.v,0)a次方 (考虑视线)
+
+r=2(l.n)n-l
+r=reflect()
+
+```
+- 顶点法线缓存
+- 法线变换: M的逆转置矩阵 / M的左上角3*3的转置逆矩阵
+- phong着色模型(逐片段光照)
+- 调制模式: 分量逐个相乘(光照-纹理)
+
+### 法线缓存 => 法线变换 => 调制

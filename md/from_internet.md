@@ -38,3 +38,23 @@ there's no need to call gl.useProgram.
 Similarly if we're drawing with the same shape/geometry/vertices we previously drew with
 there's no need to set those up again.
 ```
+### bufferInfo
+```
+position
+texture
+color
+normal
+```
+
+### matrix
+```
+projectionMatrix
+cameraMatrix
+viewMatrix
+modelMatrix => normalMatrix
+modelMatrix => matrix ( normalMatrix * viewMatrix * projectionMatrix )
+```
+### light
+```
+用点积求光强
+```

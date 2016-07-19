@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <meta name="robots" content="index,follow"/>
+    <title>light_点光源</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        attribute vec3 a_normal;
+
+        uniform mat4 u_world;
+        uniform mat4 u_matrix;
+        uniform mat4 u_inverseTranspose;
+
+        // 光照在 u_world 中计算
+        uniform vec3 u_lightWorldPosition;
+
+        // 传递 法向量 & 光线矢量, 都需要计算
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+
+        void main() {
+          gl_Position = u_matrix * a_position;
+
+          // 法线变换
+          v_normal = mat3(u_inverseTranspose) * a_normal;
+
+          // 光线矢量 计算
+          v_surfaceToLight = u_lightWorldPosition - (u_world * a_position).xyz;
+        }
+    </script>
+    <script id="fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+
+        uniform vec4 u_color;
+
+        void main() {
+          vec3 normal = normalize(v_normal);
+          vec3 lightDirection = normalize(v_surfaceToLight);
+
+          float light = dot(normal, lightDirection);
+
+          gl_FragColor = u_color;
+
+          // 调制
+          gl_FragColor.rgb *= light;
+        }
+    </script>
+
+</head>
+<body>
+<canvas id="canvas" width="500" height="400"></canvas>
+<script src="../vendor/webgl-3d-math.js"></script>
+<script src="../vendor/webgl-utils.js"></script>
+<script src="../vendor/primitives.js"></script>
+<script src="../js/gl.js"></script>
+<script>
+    window.onload = init;
+    function init(){
+        var canvas =document.getElementById('canvas');
+        var gl = canvas.getContext('webgl');
+        var programInfo = createProgramInfo(gl, ['vs','fs']);
+
+        var sphereBufferInfo = createFlattenedVertices(gl, primitives.createSphereVertices(50, 25, 20));
+        var objectToDraw = {
+            programInfo: programInfo,
+            bufferInfo: sphereBufferInfo,
+            uniforms: {
+                u_world: makeIdentity(),
+                u_matrix: makeIdentity(),
+                u_inverseTranspose: makeIdentity(),
+                u_lightWorldPosition: [70, 70, 70],
+                u_color: [0.2, 1, 0.2, 1]
+            }
+        };
+
+        var aspect = canvas.clientWidth / canvas.clientHeight;
+        var projectionMatrix = makePerspective(G.degToRad(60), aspect, 1, 1000);
+
+        var cameraPosition = [0,100,200];
+        var target = [0,0,0];
+        var up = [0,1,0];
+        var cameraMatrix = makeLookAt(cameraPosition, target, up);
+
+        var viewMatrix = makeInverse(cameraMatrix);
+
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+        gl.clear(gl.COLOR_BUFFER_BIT || gl.DEPTH_BUFFER_BIT);
+        function draw(time){
+            time *= 0.0005;
+            // compute matrix
+            var translateMatrix = makeTranslation(-50, 0, 0);
+            var yRotationMatrix = makeYRotation(time);
+            var modelMatrix = matrixMultiply(translateMatrix, yRotationMatrix);
+            var matrix = matrixMultiply(matrixMultiply(modelMatrix, viewMatrix), projectionMatrix);
+
+            // transform normal matrix
+            var normalMatrix = makeTranspose(makeInverse(modelMatrix));
+
+            // object info
+            var programInfo = objectToDraw.programInfo;
+            var bufferInfo = objectToDraw.bufferInfo;
+            var uniforms = objectToDraw.uniforms;
+
+            // set uniform matrix
+            uniforms.u_world = modelMatrix;
+            uniforms.u_matrix = matrix;
+            uniforms.u_inverseTranspose = normalMatrix;
+
+            gl.useProgram(programInfo.program);
+            setBuffersAndAttributes(gl, programInfo.attribSetters, bufferInfo);
+            setUniforms(programInfo.uniformSetters, uniforms);
+            gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
+            requestAnimationFrame(draw);
+        }
+        requestAnimationFrame(draw);
+
+        function createFlattenedVertices(gl, vertices) {
+            return createBufferInfoFromArrays(
+                    gl,
+                    primitives.makeRandomVertexColors(
+                            primitives.deindexVertices(vertices),
+                            {
+                                vertsPerColor: 6,
+                                rand: function(ndx, channel) {
+                                    return channel < 3 ? ((128 + Math.random() * 128) | 0) : 255;
+                                }
+                            }
+                    )
+            );
+        }
+
+    }
+</script>
+</body>
+</html>
