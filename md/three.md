@@ -1,0 +1,1 @@
+### You give them a camera position and field of view, a couple of lights, and a cube. They deal with all the rest.

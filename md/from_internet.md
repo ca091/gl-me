@@ -56,5 +56,9 @@ modelMatrix => matrix ( normalMatrix * viewMatrix * projectionMatrix )
 ```
 ### light
 ```
-用点积求光强
+用点积求光强,在进行调制
 ```
+### scene graph structure
+- local space can ignore everything above it
+- worldMatrix = greatGrandParent * grandParent * parent * self(localMatrix)
+- worldMatrixForMoon = galaxyMatrix * starMatrix * planetMatrix * moonMatrix;

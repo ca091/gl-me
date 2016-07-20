@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no, email=no"/>
+    <meta name="description" content=""/>
+    <meta name="keywords" content=""/>
+    <meta name="robots" content="index,follow"/>
+    <title>scene_graph</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <script id="vs" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        attribute vec4 a_color;
+
+        uniform mat4 u_matrix;
+        varying vec4 v_color;
+        void main(){
+            gl_Position = u_matrix * a_position;
+            v_color = a_color;
+        }
+    </script>
+    <script id="fs" type="x-shader/x-fragment">
+        precision mediump float;
+        varying vec4 v_color;
+        // 处理颜色
+        uniform vec4 u_colorMult;
+        uniform vec4 u_colorOffset;
+        void main(){
+            gl_FragColor = v_color * u_colorMult + u_colorOffset;
+        }
+    </script>
+
+</head>
+<body>
+<canvas id="canvas" width="500" height="400"></canvas>
+<script src="../vendor/webgl-3d-math.js"></script>
+<script src="../vendor/webgl-utils.js"></script>
+<script src="../vendor/primitives.js"></script>
+<script src="../js/gl.js"></script>
+<script>
+window.onload = init;
+function init(){
+    var canvas = document.getElementById('canvas');
+    var gl = canvas.getContext('webgl');
+
+    var sphereBufferInfo = createFlattenedVertices(gl, primitives.createSphereVertices(10, 12, 6));
+    var programInfo = createProgramInfo(gl, ['vs','fs']);
+    // 负责 轨道 (有对应矩阵,没有实体对象)
+    var solarSystemNode = new Node();
+    var earthOrbitNode = new Node();
+    var moonOrbitNode = new Node();
+    earthOrbitNode.localMatrix = makeTranslation(100,0,0);
+    moonOrbitNode.localMatrix = makeTranslation(25,0,0);
+    // 负责 自转 & 缩放
+    var sunNode = new Node();
+    var earthNode = new Node();
+    var moonNode = new Node();
+
+    sunNode.localMatrix = makeScale(5,5,5);
+    sunNode.drawInfo = {
+        uniforms: {
+            u_colorOffset: [0.6, 0.6, 0, 1], // yellow
+            u_colorMult:   [0.4, 0.4, 0, 1],
+            u_matrix: makeIdentity()
+        },
+        programInfo: programInfo,
+        bufferInfo: sphereBufferInfo
+    };
+    earthNode.localMatrix = makeScale(2,2,2);
+    earthNode.drawInfo = {
+        uniforms: {
+            u_colorOffset: [0.2, 0.5, 0.8, 1],  // blue-green
+            u_colorMult:   [0.8, 0.5, 0.2, 1],
+            u_matrix: makeIdentity()
+        },
+        programInfo: programInfo,
+        bufferInfo: sphereBufferInfo
+    };
+    moonNode.localMatrix = makeScale(0.4,0.4,0.4);
+    moonNode.drawInfo = {
+        uniforms: {
+            u_colorOffset: [0.6, 0.6, 0.6, 1],  // gray
+            u_colorMult:   [0.1, 0.1, 0.1, 1],
+            u_matrix: makeIdentity()
+        },
+        programInfo: programInfo,
+        bufferInfo: sphereBufferInfo
+    };
+
+    // connect the celetial objects
+    earthOrbitNode.setParent(solarSystemNode);
+    moonOrbitNode.setParent(earthOrbitNode);
+    sunNode.setParent(solarSystemNode);
+    earthNode.setParent(earthOrbitNode);
+    moonNode.setParent(moonOrbitNode);
+
+    var objectsToDraw = [
+        sunNode,
+        earthNode,
+        moonNode
+    ];
+
+    gl.enable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+
+    // Clear the canvas AND the depth buffer.
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Compute the projection matrix
+    var aspect = canvas.clientWidth / canvas.clientHeight;
+    var projectionMatrix = makePerspective(G.degToRad(60), aspect, 1, 2000);
+
+    // Compute the camera's matrix using look at.
+    var cameraPosition = [0, -200, 0];
+    var target = [0, 0, 0];
+    var up = [0, 0, 1];
+    var cameraMatrix = makeLookAt(cameraPosition, target, up);
+
+    // Make a view matrix from the camera matrix.
+    var viewMatrix = makeInverse(cameraMatrix);
+
+    var viewProjectionMatrix = matrixMultiply(viewMatrix, projectionMatrix);
+
+    var Loop = {
+        then: 0,
+        earthOrbitSpeed: 1,
+        moonOrbitSpeed: 1,
+        sunSpeed: 0.5,
+        earthSpeed: 5,
+        moonSpeed: -1
+    };
+    /**
+     * 关键: 计算每个节点的 localMatrix & worldMatrix ( worldMatrix 即 modelMatrix )
+     * 每个对象的 worldMatrix 通过递归得到
+     * example: p1 => p2 => p3
+     * p3.worldMatrix = p2.localMatrix * p1.localMatrix
+     * @param time
+     */
+    function draw(time){
+        time *= 0.001;
+        var deltaTime = time - Loop.then;
+        Loop.then = time;
+        // update the local matrices for each object.
+        // 轨道 公转
+        matrixMultiply(earthOrbitNode.localMatrix, makeYRotation(deltaTime*Loop.earthOrbitSpeed), earthOrbitNode.localMatrix);
+        matrixMultiply(moonOrbitNode.localMatrix, makeYRotation(deltaTime*Loop.moonOrbitSpeed), moonOrbitNode.localMatrix);
+        // 对象 自传
+        matrixMultiply(sunNode.localMatrix, makeYRotation(deltaTime*Loop.sunSpeed), sunNode.localMatrix);
+        matrixMultiply(earthNode.localMatrix, makeYRotation(deltaTime*Loop.earthSpeed), earthNode.localMatrix);
+        matrixMultiply(moonNode.localMatrix, makeYRotation(deltaTime*Loop.moonSpeed), moonNode.localMatrix);
+        // Update all world matrices in the scene graph, 精髓在于递归计算每个对象的 worldMatrix
+        solarSystemNode.updateWorldMatrix();
+
+        // ------ Draw the objects --------
+
+        var lastUsedProgramInfo = null;
+        var lastUsedBufferInfo = null;
+
+        objectsToDraw.forEach(function(object) {
+            var programInfo = object.drawInfo.programInfo;
+            var bufferInfo = object.drawInfo.bufferInfo;
+            var uniforms = object.drawInfo.uniforms;
+            uniforms.u_matrix = matrixMultiply(object.worldMatrix, viewProjectionMatrix);
+
+            if (programInfo !== lastUsedProgramInfo) {
+                lastUsedProgramInfo = programInfo;
+                gl.useProgram(programInfo.program);
+            }
+
+            // Setup all the needed attributes.
+            if (programInfo !== lastUsedProgramInfo || bufferInfo !== lastUsedBufferInfo) {
+                lastUsedBufferInfo = bufferInfo;
+                setBuffersAndAttributes(gl, programInfo.attribSetters, bufferInfo);
+            }
+
+            // Set the uniforms.
+            setUniforms(programInfo.uniformSetters, uniforms);
+
+            // Draw
+            gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
+        });
+        requestAnimationFrame(draw)
+    }
+    requestAnimationFrame(draw);
+
+
+    function createFlattenedVertices(gl, vertices) {
+        var last;
+        return createBufferInfoFromArrays(
+                gl,
+                primitives.makeRandomVertexColors(
+                        primitives.deindexVertices(vertices),
+                        {
+                            vertsPerColor: 1,
+                            rand: function(ndx, channel) {
+                                if (channel == 0) {
+                                    last = 128 + Math.random() * 128 | 0;
+                                }
+                                return channel < 3 ? last : 255;
+                            }
+                        })
+        );
+    }
+
+}
+</script>
+</body>
+</html>
